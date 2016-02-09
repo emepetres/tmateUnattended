@@ -1,52 +1,54 @@
-Acceso remoto a equipos sin conexión directa (Tmate)
+tmate unattended
 =====
 
-Funcionamiento
+Brief description
 -----------
-Tmate crea una sesión de Tmux remota usando sus propios servidores y proporcionando una dirección ssh para conectarse remotamente (parecído a un tunel inverso SSH).
+This tool automatize *tmate* to connect, like a reverse tunnel, to machines where direct connection is not possible.
 
-Desde el cliente mediante el comando **send_connection.sh**, se comprueba si tenemos las claves del servidor rtunnel, y posteriormente se crea si no existe una sesión de Tmate. Esta sesión se bloquea mediante Vlock, y se envia la dirección ssh proporcionada por Tmate al servidor ```[REMOTE_HOST]``` mediante una conexión ssh normal.
+From the machine to which we want to connect (*box* from now on), the script **send_connection.sh** is executed automatically (using *cron* for example). This file creates a tmate session (if not exists), blocks it with *vlock*, and sends the session URL to a remote host (*server* from now on).
 
-En ```[REMOTE_HOST]``` mediante **save_remote_connection.sh** se recibe dicha dirección y se guarda en una base de datos Mysql. Posteriormente esta base de datos puede consultarse para obtener la dirección ssh de Tmate y conectarse al cliente.
+On the *server* machine, this URL is received and saved by the script **save_remote_connection.sh**. The URL is saved in a MySQL database. This DB can be consulted to obtain the ssh URL and connect to *box*.
 
-Instalación servidor
+Install server
 -----------
-* Servidor ssh instalado escuchando puerto por defecto
-* Usuario "```[SSH_USER]```", clave "```[SSH_PASSWD]```"
-```
-#GatewayPorts clientspecified >> /etc/ssh/sshd.config
-$mv remote_connection.sh ```[SSH_USER_HOME]```
-$chmod +x /home/rtunnel/remote_connection.sh
-```
+* SSH server listening on the default port (22).
 
-* Es conveniente guardar las claves del servidor que se encuentran en /etc/ssh, ya que si cambiamos el servidor, será necesario usar estas mismas claves para que las conexiones aparezcan en el nuevo servidor.
-```
-#mv old_host_keys/* /etc/ssh/ (reescribir)
-```
+* User created with remote ssh access
 
-* Si no se pueden reescribir las claves en el nuevo servidor, el cliente puede tomar las 
-claves nuevas siempre y cuando no aparezca el servidor en el archivo de known_hosts del cliente. 
+* Save the ssh keys inside /etc/ssh is recommended, in order to be able to change this *server* from machine in the future.
 
-* Servidor Mysql instalado, con base de datos ```[BD_NAME]``` creada.
+* If we change *server* from machine without copying the old ssh keys, the *box* machines can always use the new keys if the **known_hosts** file is removed in every *box*. 
+
+* MySQL server installed, with a BD created. Edit the file **create_table_and_user.sql** with a new BD_USER and BD_PASSWD to connect to the new table that is going to be created.
 ```
 > source create_table_and_user.sql
 ```
 
-Instalación cliente
+* Edit save_remote_connection.sh with the BD data, and move it to the server.
+```
+$mv save_remote_connection.sh [USER_HOME]
+$chmod +x [USER_HOME]/save_remote_connection.sh
+```
+
+* As an example the file **index.php** can be used to read the BD from a web browser, editing it with the BD data and giving it and user and a password (to protect the URL sessions).
+
+Install box
 -----------
-* Instalar paquetes:
+* Install packages:
 lsblk ssh sshpass tmux tmate vlock shc
 
-* Configuración ssh:
-Al final del archivo /etc/ssh/ssh_config escribir:
-Host ```[REMOTE_HOST]```
+* Configure ssh to ignore server ip and only use the domain name and public key. This is useful in case you want to change *server* from machine in the future. At the end of the file /etc/ssh/ssh_config write:
+```
+Host [REMOTE_HOST]
 	CheckHostIp no
-
-* Encriptar send_connection.sh mediante shc y mover el .x a donde se quiera, dándole solo permisos de 
-ejecución para todo el mundo (nada de lectura o escritura excepto root)
-```
-$shc -T -f send_connection.sh
 ```
 
-* Ejecutar send_connection.sh desde el CRON con la periodicidad que se 
-estime oportuna.
+* Edit the **send_connection.sh** with the *server* data. Then encrypt it through **shc**, giving only execution permissions to everyone. For security, remove the .sh script and the other files generated. 
+```
+$ shc -T -f send_connection.sh
+$ chmod 111 send_connection.sh.x
+$ rm send_connection.sh send_connection.sh.x.c
+```
+
+* Execute **send_connection.sh.x** periodically (for example using CRON).
+
